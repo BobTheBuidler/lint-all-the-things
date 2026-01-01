@@ -15,9 +15,11 @@ runs:
         python-version: ${{ inputs.python-version }}
 
     - name: Install PyUpgrade
+      shell: basb
       run: pip install pyupgrade
 
     - name: Run PyUpgrade
+      shell: basb
       run: pyupgrade --${{ inputs.pyupgrade-target-version }}-plus --exit-zero-even-if-changed **/**/**.py
 
     - name: Check for changes (pyupgrade)
@@ -41,9 +43,11 @@ runs:
         git push
 
     - name: Install Black
+      shell: basb
       run: pip install black
 
     - name: Run Black
+      shell: basb
       run: black .
 
     - name: Check for changes (black)
@@ -67,9 +71,11 @@ runs:
         git push
 
     - name: Install Autoflake
+      shell: basb
       run: pip install autoflake
 
     - name: Run Autoflake
+      shell: basb
       run: autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .
 
     - name: Check for changes (autoflake)
