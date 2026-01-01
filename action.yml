@@ -1,0 +1,93 @@
+name: "Lint All The Things"
+description: "Composite action to run pyupgrade, black, and autoflake on a Python codebase, auto-committing and pushing changes if needed."
+author: "Cline"
+inputs:
+  python-version:
+    description: "Python version to use (eg. 3.9 3.10)"
+  pyupgrade-target-version:
+    description: "Python version to target for pyupgrade (eg. py39 py310)"
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install PyUpgrade
+      run: pip install pyupgrade
+
+    - name: Run PyUpgrade
+      run: pyupgrade --${{ inputs.pyupgrade-target-version }}-plus --exit-zero-even-if-changed **/**/**.py
+
+    - name: Check for changes (pyupgrade)
+      id: changes_pyupgrade
+      shell: bash
+      run: |
+        if [[ -n $(git status --porcelain) ]]; then
+          echo "changes_detected=true" >> $GITHUB_ENV
+        else
+          echo "changes_detected=false" >> $GITHUB_ENV
+        fi
+
+    - name: Commit changes (pyupgrade)
+      if: env.changes_detected == 'true'
+      shell: bash
+      run: |
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git add .
+        git commit -m "chore: run \`pyupgrade --${{ inputs.pyupgrade-target-version }}-plus\`"
+        git push
+
+    - name: Install Black
+      run: pip install black
+
+    - name: Run Black
+      run: black .
+
+    - name: Check for changes (black)
+      id: changes_black
+      shell: bash
+      run: |
+        if [[ -n $(git status --porcelain) ]]; then
+          echo "changes_detected=true" >> $GITHUB_ENV
+        else
+          echo "changes_detected=false" >> $GITHUB_ENV
+        fi
+
+    - name: Commit changes (black)
+      if: env.changes_detected == 'true'
+      shell: bash
+      run: |
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git add .
+        git commit -m "chore: \`black .\`"
+        git push
+
+    - name: Install Autoflake
+      run: pip install autoflake
+
+    - name: Run Autoflake
+      run: autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .
+
+    - name: Check for changes (autoflake)
+      id: changes_autoflake
+      shell: bash
+      run: |
+        if [[ -n $(git status --porcelain) ]]; then
+          echo "changes_detected=true" >> $GITHUB_ENV
+        else
+          echo "changes_detected=false" >> $GITHUB_ENV
+        fi
+
+    - name: Commit changes (autoflake)
+      if: env.changes_detected == 'true'
+      shell: bash
+      run: |
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git add .
+        git commit -m "chore: autoflake"
+        git push
