@@ -20,7 +20,7 @@ runs:
 
     - name: Run PyUpgrade
       shell: bash
-      run: pyupgrade --${{ inputs.pyupgrade-target-version }}-plus --exit-zero-even-if-changed **/**/**.py
+      run: find . -name '*.py' -exec pyupgrade --${{ inputs.pyupgrade-target-version }}-plus --exit-zero-even-if-changed {} +
 
     - name: Check for changes (pyupgrade)
       id: changes_pyupgrade
