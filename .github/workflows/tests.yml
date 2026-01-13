@@ -45,10 +45,12 @@ jobs:
           const makeStubs = (binDir) => {
             fs.mkdirSync(binDir, { recursive: true });
 
-            const stubHeader = `#!/usr/bin/env node
-const fs = require('fs');
-const target = process.env.TARGET_FILE || '${TARGET_FILE}';
-`;
+            const stubHeader = [
+              '#!/usr/bin/env node',
+              "const fs = require('fs');",
+              "const target = process.env.TARGET_FILE || '" + TARGET_FILE + "';",
+              '',
+            ].join('\n');
 
             writeStub(binDir, 'pip', '#!/usr/bin/env node\nprocess.exit(0);\n');
 
