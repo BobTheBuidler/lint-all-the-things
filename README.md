@@ -1,11 +1,11 @@
 # Lint All The Things
 
-Composite GitHub Action to run [pyupgrade](https://github.com/asottile/pyupgrade), [black](https://github.com/psf/black), and [autoflake](https://github.com/PyCQA/autoflake) on your Python codebase.  
+Composite GitHub Action to run [pyupgrade](https://github.com/asottile/pyupgrade), [isort](https://github.com/PyCQA/isort), [black](https://github.com/psf/black), and [autoflake](https://github.com/PyCQA/autoflake) on your Python codebase.  
 Automatically commits and pushes changes if any of the tools modify your code.
 
 ## Features
 
-- Runs pyupgrade, black, and autoflake in sequence
+- Runs pyupgrade, isort, black, and autoflake in sequence (respecting any repo config files)
 - Auto-commits and pushes changes for each tool if needed
 - Configurable Python version (default: 3.12)
 - Designed for use in PR workflows
@@ -34,7 +34,7 @@ jobs:
 ## How it works
 
 1. Sets up Python
-2. Installs and runs pyupgrade, black, and autoflake (in that order)
+2. Installs and runs pyupgrade, isort, black, and autoflake (in that order; each tool uses your repo config if present)
 3. After each tool, checks for changes and auto-commits/pushes if needed
 
 **Note:**  
@@ -45,6 +45,7 @@ jobs:
 ## Example Commit Messages
 
 - `chore: run \`pyupgrade\` for Python3.10`
+- `chore: isort`
 - `chore: \`black .\``
 - `chore: autoflake`
 

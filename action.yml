@@ -1,5 +1,5 @@
 name: "Lint All The Things"
-description: "Composite action to run pyupgrade, black, and autoflake on a Python codebase, auto-committing and pushing changes if needed."
+description: "Composite action to run pyupgrade, isort, black, and autoflake on a Python codebase, auto-committing and pushing changes if needed."
 author: "Cline"
 inputs:
   python-version:
@@ -40,6 +40,34 @@ runs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git add .
         git commit -m "chore: run \`pyupgrade --${{ inputs.pyupgrade-target-version }}-plus\`"
+        git push
+
+    - name: Install isort
+      shell: bash
+      run: pip install isort
+
+    - name: Run isort
+      shell: bash
+      run: isort .
+
+    - name: Check for changes (isort)
+      id: changes_isort
+      shell: bash
+      run: |
+        if [[ -n $(git status --porcelain) ]]; then
+          echo "changes_detected=true" >> $GITHUB_ENV
+        else
+          echo "changes_detected=false" >> $GITHUB_ENV
+        fi
+
+    - name: Commit changes (isort)
+      if: env.changes_detected == 'true'
+      shell: bash
+      run: |
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git add .
+        git commit -m "chore: isort"
         git push
 
     - name: Install Black
