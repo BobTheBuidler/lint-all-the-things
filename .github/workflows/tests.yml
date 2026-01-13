@@ -1,0 +1,243 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  composite-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run composite action tests (no commits)
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const os = require('os');
+          const path = require('path');
+          const { execSync } = require('child_process');
+          const assert = require('assert');
+          const crypto = require('crypto');
+
+          const TARGET_FILE = 'main.py';
+          const PYUPGRADE_TARGET = '--py311-plus';
+
+          const run = (cmd, cwd, extraEnv = {}) =>
+            execSync(cmd, { cwd, stdio: 'inherit', env: { ...process.env, ...extraEnv } });
+
+          const hashDiff = (cwd) => {
+            const diff = execSync('git diff --no-color', { cwd, encoding: 'utf8' });
+            return crypto.createHash('sha256').update(diff).digest('hex');
+          };
+
+          const writeStub = (dir, name, body) => {
+            const file = path.join(dir, name);
+            fs.writeFileSync(file, body, { mode: 0o755 });
+          };
+
+          const makeStubs = (binDir) => {
+            fs.mkdirSync(binDir, { recursive: true });
+
+            const stubHeaderLines = [
+              '#!/usr/bin/env node',
+              "const fs = require('fs');",
+              "const target = process.env.TARGET_FILE || '" + TARGET_FILE + "';",
+              '',
+            ];
+            const stubHeader = stubHeaderLines.join('\n');
+
+            writeStub(binDir, 'pip', '#!/usr/bin/env node\nprocess.exit(0);\n');
+
+            writeStub(
+              binDir,
+              'pyupgrade',
+              stubHeader +
+                '\n' +
+                "const args = process.argv.slice(2);\n" +
+                "if (process.env.MOCK_PYUPGRADE_CHANGE === '1') {\n" +
+                '  args.forEach((arg) => {\n' +
+                '    if (fs.existsSync(arg) && fs.statSync(arg).isFile()) {\n' +
+                "      fs.appendFileSync(arg, '# pyupgrade change\\n');\n" +
+                '    }\n' +
+                '  });\n' +
+                '}\n'
+            );
+
+            writeStub(
+              binDir,
+              'isort',
+              stubHeader +
+                '\n' +
+                "if (process.env.MOCK_ISORT_CHANGE === '1') {\n" +
+                "  fs.appendFileSync(target, '# isort change\\n');\n" +
+                '}\n'
+            );
+
+            writeStub(
+              binDir,
+              'black',
+              stubHeader +
+                '\n' +
+                "if (process.env.MOCK_BLACK_CHANGE === '1') {\n" +
+                "  fs.appendFileSync(target, '# black change\\n');\n" +
+                '}\n'
+            );
+
+            writeStub(
+              binDir,
+              'autoflake',
+              stubHeader +
+                '\n' +
+                "if (process.env.MOCK_AUTOFLAKE_CHANGE === '1') {\n" +
+                "  fs.appendFileSync(target, '# autoflake change\\n');\n" +
+                '}\n'
+            );
+          };
+
+          const setupRepo = () => {
+            const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-action-'));
+            run('git init -q', repo);
+            run('git config user.name "Test Bot"', repo);
+            run('git config user.email "test@example.com"', repo);
+            fs.writeFileSync(path.join(repo, TARGET_FILE), "print('hello')\n");
+            run(`git add ${TARGET_FILE}`, repo);
+            run('git commit -q -m "init"', repo);
+            const binDir = path.join(repo, '.bin');
+            makeStubs(binDir);
+            return { repo, binDir };
+          };
+
+          const runActionLogic = (repo, binDir, extraEnv = {}) => {
+            const env = {
+              TARGET_FILE,
+              PATH: `${binDir}:${process.env.PATH}`,
+              ...extraEnv,
+            };
+
+            let changedLinters = [];
+            let changedLabels = [];
+
+            const pyFiles = execSync("find . -name '*.py'", { cwd: repo, encoding: 'utf8' })
+              .trim()
+              .split('\n')
+              .filter(Boolean);
+
+            const hashBeforePyupgrade = hashDiff(repo);
+            pyFiles.forEach((file) =>
+              run(`pyupgrade ${PYUPGRADE_TARGET} --exit-zero-even-if-changed ${file}`, repo, env)
+            );
+            if (hashDiff(repo) !== hashBeforePyupgrade) {
+              changedLinters.push('pyupgrade');
+              changedLabels.push(`pyupgrade ${PYUPGRADE_TARGET}`);
+            }
+
+            const hashBeforeIsort = hashDiff(repo);
+            run('isort .', repo, env);
+            if (hashDiff(repo) !== hashBeforeIsort) {
+              changedLinters.push('isort');
+              changedLabels.push('isort');
+            }
+
+            const hashBeforeBlack = hashDiff(repo);
+            run('black .', repo, env);
+            if (hashDiff(repo) !== hashBeforeBlack) {
+              changedLinters.push('black');
+              changedLabels.push('black .');
+            }
+
+            const hashBeforeAutoflake = hashDiff(repo);
+            run(
+              'autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .',
+              repo,
+              env
+            );
+            if (hashDiff(repo) !== hashBeforeAutoflake) {
+              changedLinters.push('autoflake');
+              changedLabels.push(
+                'autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .'
+              );
+            }
+
+            if (changedLinters.length) {
+              const msg = `chore: lint (${changedLabels.join('; ')})`;
+              fs.writeFileSync(path.join(repo, 'poosh.log'), msg + '\n');
+            }
+          };
+
+          const assertLog = (repo, expected) => {
+            const logPath = path.join(repo, 'poosh.log');
+            assert.ok(fs.existsSync(logPath), 'expected poosh log to exist');
+            const content = fs.readFileSync(logPath, 'utf8').trim();
+            assert.strictEqual(content, expected);
+          };
+
+          const testNoChanges = () => {
+            const { repo, binDir } = setupRepo();
+            runActionLogic(repo, binDir);
+            const logPath = path.join(repo, 'poosh.log');
+            assert.ok(!fs.existsSync(logPath), 'expected no poosh log when no changes');
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
+          const testIsortOnly = () => {
+            const { repo, binDir } = setupRepo();
+            runActionLogic(repo, binDir, { MOCK_ISORT_CHANGE: '1' });
+            assertLog(repo, 'chore: lint (isort)');
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
+          const testPyupgradeBlack = () => {
+            const { repo, binDir } = setupRepo();
+            runActionLogic(repo, binDir, { MOCK_PYUPGRADE_CHANGE: '1', MOCK_BLACK_CHANGE: '1' });
+            assertLog(repo, `chore: lint (pyupgrade ${PYUPGRADE_TARGET}; black .)`);
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
+          const testBlackOnly = () => {
+            const { repo, binDir } = setupRepo();
+            runActionLogic(repo, binDir, { MOCK_BLACK_CHANGE: '1' });
+            assertLog(repo, 'chore: lint (black .)');
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
+          const testIsortBlack = () => {
+            const { repo, binDir } = setupRepo();
+            runActionLogic(repo, binDir, { MOCK_ISORT_CHANGE: '1', MOCK_BLACK_CHANGE: '1' });
+            assertLog(repo, 'chore: lint (isort; black .)');
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
+          const testAllLinters = () => {
+            const { repo, binDir } = setupRepo();
+            runActionLogic(repo, binDir, {
+              MOCK_PYUPGRADE_CHANGE: '1',
+              MOCK_ISORT_CHANGE: '1',
+              MOCK_BLACK_CHANGE: '1',
+              MOCK_AUTOFLAKE_CHANGE: '1',
+            });
+            assertLog(
+              repo,
+              'chore: lint (pyupgrade --py311-plus; isort; black .; autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .)'
+            );
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
+          const main = () => {
+            testNoChanges();
+            testIsortOnly();
+            testPyupgradeBlack();
+            testBlackOnly();
+            testIsortBlack();
+            testAllLinters();
+            console.log('All tests passed.');
+          };
+
+          main();
+          NODE

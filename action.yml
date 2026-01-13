@@ -14,33 +14,27 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
+    - name: Initialize changed linters list
+      shell: bash
+      run: |
+        echo "changed_linters=" >> "$GITHUB_ENV"
+        echo "changed_linter_labels=" >> "$GITHUB_ENV"
+
     - name: Install PyUpgrade
       shell: bash
       run: pip install pyupgrade
 
     - name: Run PyUpgrade
       shell: bash
-      run: find . -name '*.py' -exec pyupgrade --${{ inputs.pyupgrade-target-version }}-plus --exit-zero-even-if-changed {} +
-
-    - name: Check for changes (pyupgrade)
-      id: changes_pyupgrade
-      shell: bash
       run: |
-        if [[ -n $(git status --porcelain) ]]; then
-          echo "changes_detected=true" >> $GITHUB_ENV
-        else
-          echo "changes_detected=false" >> $GITHUB_ENV
+        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        find . -name '*.py' -exec pyupgrade --${{ inputs.pyupgrade-target-version }}-plus --exit-zero-even-if-changed {} +
+        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+
+        if [[ "$before_hash" != "$after_hash" ]]; then
+          echo "changed_linters=${changed_linters:+$changed_linters,}pyupgrade" >> "$GITHUB_ENV"
+          echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }pyupgrade --${{ inputs.pyupgrade-target-version }}-plus" >> "$GITHUB_ENV"
         fi
-
-    - name: Commit changes (pyupgrade)
-      if: env.changes_detected == 'true'
-      shell: bash
-      run: |
-        git config --local user.name "github-actions[bot]"
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git add .
-        git commit -m "chore: run \`pyupgrade --${{ inputs.pyupgrade-target-version }}-plus\`"
-        git push
 
     - name: Install isort
       shell: bash
@@ -48,27 +42,15 @@ runs:
 
     - name: Run isort
       shell: bash
-      run: isort .
-
-    - name: Check for changes (isort)
-      id: changes_isort
-      shell: bash
       run: |
-        if [[ -n $(git status --porcelain) ]]; then
-          echo "changes_detected=true" >> $GITHUB_ENV
-        else
-          echo "changes_detected=false" >> $GITHUB_ENV
+        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        isort .
+        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+
+        if [[ "$before_hash" != "$after_hash" ]]; then
+          echo "changed_linters=${changed_linters:+$changed_linters,}isort" >> "$GITHUB_ENV"
+          echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }isort" >> "$GITHUB_ENV"
         fi
-
-    - name: Commit changes (isort)
-      if: env.changes_detected == 'true'
-      shell: bash
-      run: |
-        git config --local user.name "github-actions[bot]"
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git add .
-        git commit -m "chore: isort"
-        git push
 
     - name: Install Black
       shell: bash
@@ -76,27 +58,15 @@ runs:
 
     - name: Run Black
       shell: bash
-      run: black .
-
-    - name: Check for changes (black)
-      id: changes_black
-      shell: bash
       run: |
-        if [[ -n $(git status --porcelain) ]]; then
-          echo "changes_detected=true" >> $GITHUB_ENV
-        else
-          echo "changes_detected=false" >> $GITHUB_ENV
+        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        black .
+        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+
+        if [[ "$before_hash" != "$after_hash" ]]; then
+          echo "changed_linters=${changed_linters:+$changed_linters,}black" >> "$GITHUB_ENV"
+          echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }black ." >> "$GITHUB_ENV"
         fi
-
-    - name: Commit changes (black)
-      if: env.changes_detected == 'true'
-      shell: bash
-      run: |
-        git config --local user.name "github-actions[bot]"
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git add .
-        git commit -m "chore: \`black .\`"
-        git push
 
     - name: Install Autoflake
       shell: bash
@@ -104,24 +74,20 @@ runs:
 
     - name: Run Autoflake
       shell: bash
-      run: autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .
-
-    - name: Check for changes (autoflake)
-      id: changes_autoflake
-      shell: bash
       run: |
-        if [[ -n $(git status --porcelain) ]]; then
-          echo "changes_detected=true" >> $GITHUB_ENV
-        else
-          echo "changes_detected=false" >> $GITHUB_ENV
+        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .
+        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+
+        if [[ "$before_hash" != "$after_hash" ]]; then
+          echo "changed_linters=${changed_linters:+$changed_linters,}autoflake" >> "$GITHUB_ENV"
+          echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r ." >> "$GITHUB_ENV"
         fi
 
-    - name: Commit changes (autoflake)
-      if: env.changes_detected == 'true'
-      shell: bash
-      run: |
-        git config --local user.name "github-actions[bot]"
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git add .
-        git commit -m "chore: autoflake"
-        git push
+    - name: Commit changes (all linters)
+      if: env.changed_linters != ''
+      uses: BobTheBuidler/poosh@master
+      with:
+        commit-message: "chore: lint (${{ env.changed_linter_labels || env.changed_linters }})"
+        trigger-branch: ${{ github.head_ref || github.ref_name }}
+        trigger-pr-number: ${{ github.event.pull_request.number }}

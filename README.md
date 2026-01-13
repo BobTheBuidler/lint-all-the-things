@@ -1,12 +1,12 @@
 # Lint All The Things
 
 Composite GitHub Action to run [pyupgrade](https://github.com/asottile/pyupgrade), [isort](https://github.com/PyCQA/isort), [black](https://github.com/psf/black), and [autoflake](https://github.com/PyCQA/autoflake) on your Python codebase.  
-Automatically commits and pushes changes if any of the tools modify your code.
+Automatically commits once (via [Poosh](https://github.com/BobTheBuidler/poosh)), pushes, or opens a PR if any of the tools modify your code—using a commit message that lists which linters actually changed files, with the same detail as the individual commits (e.g., pyupgrade target version, `black .`, autoflake flags).
 
 ## Features
 
 - Runs pyupgrade, isort, black, and autoflake in sequence (respecting any repo config files)
-- Auto-commits and pushes changes for each tool if needed
+- Auto-commits once with Poosh, and the commit message lists only the linters that changed files (keeping detailed commands/versions)
 - Configurable Python version (default: 3.12)
 - Designed for use in PR workflows
 
@@ -35,19 +35,22 @@ jobs:
 
 1. Sets up Python
 2. Installs and runs pyupgrade, isort, black, and autoflake (in that order; each tool uses your repo config if present)
-3. After each tool, checks for changes and auto-commits/pushes if needed
+3. After each tool, checks for changes and builds a list of linters that modified code
+4. Commits once (via Poosh) with a message that lists the linters that made changes—preserving details like pyupgrade target, `black .`, and autoflake flags—then pushes or opens a PR
 
 **Note:**  
 - This action expects you to have already checked out your code (use actions/checkout before this action).
-- Each tool's changes are committed separately, with clear commit messages.
-- If no changes are made by a tool, no commit is created for that tool.
+- Commits target the current branch (`github.head_ref` or `github.ref_name`), and Poosh will create a PR if the branch is protected.
+- If no changes are made by any tool, no commit is created.
 
 ## Example Commit Messages
 
-- `chore: run \`pyupgrade\` for Python3.10`
-- `chore: isort`
-- `chore: \`black .\``
-- `chore: autoflake`
+- `chore: lint (pyupgrade --py311-plus; isort; black .)`
+- `chore: lint (black .)`
+
+## Testing
+
+- CI runs an inline Node harness (see `.github/workflows/tests.yml`) that stubs linters/Poosh, uses temp repos, and never commits to this repository. You can copy the inline script from the workflow step to run locally if desired.
 
 ## License
 
