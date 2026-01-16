@@ -40,7 +40,7 @@ jobs:
 
 **Note:**  
 - This action expects you to have already checked out your code (use actions/checkout before this action).
-- Commits target the current branch (`github.head_ref` or `github.ref_name`), and Poosh will create a PR if the branch is protected.
+- Commits target the current branch (`github.head_ref` or `github.ref_name`). If a direct push fails (protected branch or fork PR), Poosh opens a PR instead; for fork PRs it targets the base branch.
 - If no changes are made by any tool, no commit is created.
 
 ## Example Commit Messages
