@@ -1,5 +1,5 @@
 name: "Lint All The Things"
-description: "Composite action to run pyupgrade, isort, black, autoflake, and Prettier (JSON/YAML) on a codebase, auto-committing and pushing changes if needed."
+description: "Composite action to run various linters (see README) on a codebase, auto-committing and pushing changes if needed."
 author: "Cline"
 inputs:
   python-version:
