@@ -22,24 +22,33 @@ jobs:
           const fs = require('fs');
           const os = require('os');
           const path = require('path');
-          const { execSync } = require('child_process');
+          const { execSync, execFileSync } = require('child_process');
           const assert = require('assert');
           const crypto = require('crypto');
 
           const TARGET_FILE = 'main.py';
+          const JSON_FILE = 'data.json';
           const PYUPGRADE_TARGET = '--py311-plus';
 
           const run = (cmd, cwd, extraEnv = {}) =>
             execSync(cmd, { cwd, stdio: 'inherit', env: { ...process.env, ...extraEnv } });
+
+          const runFile = (file, args, cwd, extraEnv = {}) =>
+            execFileSync(file, args, { cwd, stdio: 'inherit', env: { ...process.env, ...extraEnv } });
 
           const hashDiff = (cwd) => {
             const diff = execSync('git diff --no-color', { cwd, encoding: 'utf8' });
             return crypto.createHash('sha256').update(diff).digest('hex');
           };
 
+          const writeStubAt = (file, body) => {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            fs.writeFileSync(file, body, { mode: 0o755 });
+          };
+
           const writeStub = (dir, name, body) => {
             const file = path.join(dir, name);
-            fs.writeFileSync(file, body, { mode: 0o755 });
+            writeStubAt(file, body);
           };
 
           const makeStubs = (binDir) => {
@@ -101,16 +110,36 @@ jobs:
             );
           };
 
-          const setupRepo = () => {
+          const setupRepo = ({ withJson = false } = {}) => {
             const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-action-'));
             run('git init -q', repo);
             run('git config user.name "Test Bot"', repo);
             run('git config user.email "test@example.com"', repo);
-            fs.writeFileSync(path.join(repo, TARGET_FILE), "print('hello')\n");
-            run(`git add ${TARGET_FILE}`, repo);
+            const files = [{ name: TARGET_FILE, content: "print('hello')\n" }];
+            if (withJson) {
+              files.push({ name: JSON_FILE, content: '{\n  "name": "test"\n}\n' });
+            }
+            files.forEach((file) => {
+              fs.writeFileSync(path.join(repo, file.name), file.content);
+            });
+            run(`git add ${files.map((file) => file.name).join(' ')}`, repo);
             run('git commit -q -m "init"', repo);
             const binDir = path.join(repo, '.bin');
             makeStubs(binDir);
+            const prettierStub = [
+              '#!/usr/bin/env node',
+              "const fs = require('fs');",
+              "const files = process.argv.slice(2).filter((arg) => !arg.startsWith('-'));",
+              "if (process.env.MOCK_PRETTIER_CHANGE === '1') {",
+              '  files.forEach((file) => {',
+              '    if (fs.existsSync(file) && fs.statSync(file).isFile()) {',
+              "      fs.appendFileSync(file, '\\n');",
+              '    }',
+              '  });',
+              '}',
+              '',
+            ].join('\n');
+            writeStubAt(path.join(repo, 'node_modules', '.bin', 'prettier'), prettierStub);
             return { repo, binDir };
           };
 
@@ -165,6 +194,24 @@ jobs:
               );
             }
 
+            const jsonFiles = execSync("git ls-files -- '*.json'", { cwd: repo, encoding: 'utf8' })
+              .trim()
+              .split('\n')
+              .filter(Boolean);
+            if (jsonFiles.length) {
+              const hashBeforePrettier = hashDiff(repo);
+              const prettierPath = path.join(repo, 'node_modules', '.bin', 'prettier');
+              if (fs.existsSync(prettierPath)) {
+                runFile(prettierPath, ['--write', ...jsonFiles], repo, env);
+              } else {
+                runFile('npx', ['--yes', 'prettier', '--write', ...jsonFiles], repo, env);
+              }
+              if (hashDiff(repo) !== hashBeforePrettier) {
+                changedLinters.push('prettier');
+                changedLabels.push('prettier --write *.json');
+              }
+            }
+
             if (changedLinters.length) {
               const msg = `chore: lint (${changedLabels.join('; ')})`;
               fs.writeFileSync(path.join(repo, 'poosh.log'), msg + '\n');
@@ -214,17 +261,25 @@ jobs:
             fs.rmSync(repo, { recursive: true, force: true });
           };
 
+          const testPrettierOnly = () => {
+            const { repo, binDir } = setupRepo({ withJson: true });
+            runActionLogic(repo, binDir, { MOCK_PRETTIER_CHANGE: '1' });
+            assertLog(repo, 'chore: lint (prettier --write *.json)');
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
           const testAllLinters = () => {
-            const { repo, binDir } = setupRepo();
+            const { repo, binDir } = setupRepo({ withJson: true });
             runActionLogic(repo, binDir, {
               MOCK_PYUPGRADE_CHANGE: '1',
               MOCK_ISORT_CHANGE: '1',
               MOCK_BLACK_CHANGE: '1',
               MOCK_AUTOFLAKE_CHANGE: '1',
+              MOCK_PRETTIER_CHANGE: '1',
             });
             assertLog(
               repo,
-              'chore: lint (pyupgrade --py311-plus; isort; black .; autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .)'
+              'chore: lint (pyupgrade --py311-plus; isort; black .; autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .; prettier --write *.json)'
             );
             fs.rmSync(repo, { recursive: true, force: true });
           };
@@ -235,6 +290,7 @@ jobs:
             testPyupgradeBlack();
             testBlackOnly();
             testIsortBlack();
+            testPrettierOnly();
             testAllLinters();
             console.log('All tests passed.');
           };
