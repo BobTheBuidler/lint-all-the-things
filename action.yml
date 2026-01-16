@@ -3,9 +3,9 @@ description: "Composite action to run various linters (see README) on a codebase
 author: "Cline"
 inputs:
   python-version:
-    description: "Python version to use (eg. 3.9 3.10)"
+    description: "Python version to use (eg. 3.9 or 3.10)"
   pyupgrade-target-version:
-    description: "Python version to target for pyupgrade (eg. py39 py310)"
+    description: "Python version to target for pyupgrade (eg. py39 or py310)"
 runs:
   using: "composite"
   steps:
@@ -144,7 +144,7 @@ runs:
 
     - name: Commit changes (all linters)
       if: env.changed_linters != ''
-      uses: BobTheBuidler/poosh@v0.0.8
+      uses: BobTheBuidler/poosh@v0.0.9
       with:
         commit-message: "chore: lint (${{ env.changed_linter_labels || env.changed_linters }})"
         trigger-branch: ${{ github.head_ref || github.ref_name }}
