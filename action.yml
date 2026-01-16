@@ -144,7 +144,7 @@ runs:
 
     - name: Commit changes (all linters)
       if: env.changed_linters != ''
-      uses: BobTheBuidler/poosh@v0.0.7
+      uses: BobTheBuidler/poosh@v0.0.8
       with:
         commit-message: "chore: lint (${{ env.changed_linter_labels || env.changed_linters }})"
         trigger-branch: ${{ github.head_ref || github.ref_name }}
