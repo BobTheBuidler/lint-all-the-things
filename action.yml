@@ -1,5 +1,5 @@
 name: "Lint All The Things"
-description: "Composite action to run pyupgrade, isort, black, and autoflake on a codebase, auto-committing and pushing changes if needed."
+description: "Composite action to run various linters (see README) on a codebase, auto-committing and pushing changes if needed."
 author: "Cline"
 inputs:
   python-version:
@@ -82,6 +82,33 @@ runs:
         if [[ "$before_hash" != "$after_hash" ]]; then
           echo "changed_linters=${changed_linters:+$changed_linters,}autoflake" >> "$GITHUB_ENV"
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r ." >> "$GITHUB_ENV"
+        fi
+
+    - name: Check for JSON files
+      id: json_files
+      shell: bash
+      run: |
+        if git ls-files -- '*.json' | grep -q .; then
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Run Prettier (JSON)
+      if: steps.json_files.outputs.found == 'true'
+      shell: bash
+      run: |
+        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        if [[ -x ./node_modules/.bin/prettier ]]; then
+          git ls-files -z -- '*.json' | xargs -0 -r ./node_modules/.bin/prettier --write
+        else
+          git ls-files -z -- '*.json' | xargs -0 -r npx --yes prettier --write
+        fi
+        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+
+        if [[ "$before_hash" != "$after_hash" ]]; then
+          echo "changed_linters=${changed_linters:+$changed_linters,}prettier" >> "$GITHUB_ENV"
+          echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }prettier --write *.json" >> "$GITHUB_ENV"
         fi
 
     - name: Commit changes (all linters)
