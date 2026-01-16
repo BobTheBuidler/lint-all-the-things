@@ -28,6 +28,8 @@ jobs:
 
           const TARGET_FILE = 'main.py';
           const JSON_FILE = 'data.json';
+          const YAML_FILE = 'config.yml';
+          const YAML_ALT_FILE = 'config.yaml';
           const PYUPGRADE_TARGET = '--py311-plus';
 
           const run = (cmd, cwd, extraEnv = {}) =>
@@ -110,7 +112,7 @@ jobs:
             );
           };
 
-          const setupRepo = ({ withJson = false } = {}) => {
+          const setupRepo = ({ withJson = false, withYaml = false } = {}) => {
             const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-action-'));
             run('git init -q', repo);
             run('git config user.name "Test Bot"', repo);
@@ -118,6 +120,10 @@ jobs:
             const files = [{ name: TARGET_FILE, content: "print('hello')\n" }];
             if (withJson) {
               files.push({ name: JSON_FILE, content: '{\n  "name": "test"\n}\n' });
+            }
+            if (withYaml) {
+              files.push({ name: YAML_FILE, content: 'name: test\n' });
+              files.push({ name: YAML_ALT_FILE, content: 'name: test\n' });
             }
             files.forEach((file) => {
               fs.writeFileSync(path.join(repo, file.name), file.content);
@@ -152,6 +158,12 @@ jobs:
 
             let changedLinters = [];
             let changedLabels = [];
+            const addPrettierLabel = (label) => {
+              if (!changedLinters.includes('prettier')) {
+                changedLinters.push('prettier');
+              }
+              changedLabels.push(label);
+            };
 
             const pyFiles = execSync("find . -name '*.py'", { cwd: repo, encoding: 'utf8' })
               .trim()
@@ -207,8 +219,27 @@ jobs:
                 runFile('npx', ['--yes', 'prettier', '--write', ...jsonFiles], repo, env);
               }
               if (hashDiff(repo) !== hashBeforePrettier) {
-                changedLinters.push('prettier');
-                changedLabels.push('prettier --write *.json');
+                addPrettierLabel('prettier --write *.json');
+              }
+            }
+
+            const yamlFiles = execSync("git ls-files -- '*.yml' '*.yaml'", {
+              cwd: repo,
+              encoding: 'utf8',
+            })
+              .trim()
+              .split('\n')
+              .filter(Boolean);
+            if (yamlFiles.length) {
+              const hashBeforePrettier = hashDiff(repo);
+              const prettierPath = path.join(repo, 'node_modules', '.bin', 'prettier');
+              if (fs.existsSync(prettierPath)) {
+                runFile(prettierPath, ['--write', ...yamlFiles], repo, env);
+              } else {
+                runFile('npx', ['--yes', 'prettier', '--write', ...yamlFiles], repo, env);
+              }
+              if (hashDiff(repo) !== hashBeforePrettier) {
+                addPrettierLabel('prettier --write *.yml *.yaml');
               }
             }
 
@@ -261,15 +292,22 @@ jobs:
             fs.rmSync(repo, { recursive: true, force: true });
           };
 
-          const testPrettierOnly = () => {
+          const testPrettierJsonOnly = () => {
             const { repo, binDir } = setupRepo({ withJson: true });
             runActionLogic(repo, binDir, { MOCK_PRETTIER_CHANGE: '1' });
             assertLog(repo, 'chore: lint (prettier --write *.json)');
             fs.rmSync(repo, { recursive: true, force: true });
           };
 
+          const testPrettierYamlOnly = () => {
+            const { repo, binDir } = setupRepo({ withYaml: true });
+            runActionLogic(repo, binDir, { MOCK_PRETTIER_CHANGE: '1' });
+            assertLog(repo, 'chore: lint (prettier --write *.yml *.yaml)');
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
           const testAllLinters = () => {
-            const { repo, binDir } = setupRepo({ withJson: true });
+            const { repo, binDir } = setupRepo({ withJson: true, withYaml: true });
             runActionLogic(repo, binDir, {
               MOCK_PYUPGRADE_CHANGE: '1',
               MOCK_ISORT_CHANGE: '1',
@@ -279,7 +317,7 @@ jobs:
             });
             assertLog(
               repo,
-              'chore: lint (pyupgrade --py311-plus; isort; black .; autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .; prettier --write *.json)'
+              'chore: lint (pyupgrade --py311-plus; isort; black .; autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .; prettier --write *.json; prettier --write *.yml *.yaml)'
             );
             fs.rmSync(repo, { recursive: true, force: true });
           };
@@ -290,7 +328,8 @@ jobs:
             testPyupgradeBlack();
             testBlackOnly();
             testIsortBlack();
-            testPrettierOnly();
+            testPrettierJsonOnly();
+            testPrettierYamlOnly();
             testAllLinters();
             console.log('All tests passed.');
           };

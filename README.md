@@ -1,12 +1,12 @@
 # Lint All The Things
 
-Composite GitHub Action to run [pyupgrade](https://github.com/asottile/pyupgrade), [isort](https://github.com/PyCQA/isort), [black](https://github.com/psf/black), [autoflake](https://github.com/PyCQA/autoflake), and [Prettier](https://prettier.io/) (for JSON files) on your codebase.  
+Composite GitHub Action to run [pyupgrade](https://github.com/asottile/pyupgrade), [isort](https://github.com/PyCQA/isort), [black](https://github.com/psf/black), [autoflake](https://github.com/PyCQA/autoflake), and [Prettier](https://prettier.io/) (for JSON/YAML files) on your codebase.  
 Automatically commits once (via [Poosh](https://github.com/BobTheBuidler/poosh)), pushes, or opens a PR if any of the tools modify your code—using a commit message that lists which linters actually changed files, with the same detail as the individual commits (e.g., pyupgrade target version, `black .`, autoflake flags, Prettier flags).
 
 ## Features
 
 - Runs pyupgrade, isort, black, and autoflake in sequence (respecting any repo config files)
-- Runs Prettier on JSON files when present (respecting repo Prettier config)
+- Runs Prettier on JSON and YAML files when present (respecting repo Prettier config)
 - Auto-commits once with Poosh, and the commit message lists only the linters that changed files (keeping detailed commands/versions)
 - Configurable Python version (default: 3.12)
 - Designed for use in PR workflows
@@ -37,8 +37,9 @@ jobs:
 1. Sets up Python
 2. Installs and runs pyupgrade, isort, black, and autoflake (in that order; each tool uses your repo config if present)
 3. If the repo contains JSON files, runs Prettier on them using your repo config
-4. After each tool, checks for changes and builds a list of linters that modified code
-5. Commits once (via Poosh) with a message that lists the linters that made changes—preserving details like pyupgrade target, `black .`, autoflake flags, and Prettier flags—then pushes or opens a PR
+4. If the repo contains YAML files, runs Prettier on them using your repo config
+5. After each tool, checks for changes and builds a list of linters that modified code
+6. Commits once (via Poosh) with a message that lists the linters that made changes—preserving details like pyupgrade target, `black .`, autoflake flags, and Prettier flags—then pushes or opens a PR
 
 **Note:**  
 - This action expects you to have already checked out your code (use actions/checkout before this action).
@@ -50,6 +51,7 @@ jobs:
 - `chore: lint (pyupgrade --py311-plus; isort; black .)`
 - `chore: lint (black .)`
 - `chore: lint (prettier --write *.json)`
+- `chore: lint (prettier --write *.yml *.yaml)`
 
 ## Testing
 
