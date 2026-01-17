@@ -1,4 +1,0 @@
-pyupgrade
-isort
-black
-autoflake
