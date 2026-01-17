@@ -90,7 +90,7 @@ runs:
       id: json_files
       shell: bash
       run: |
-        json_file_list="$RUNNER_TEMP/lint-all-the-things-json-files"
+        json_file_list="$RUNNER_TEMP/lint-all-the-things-json-files" # Save list for reuse in Prettier run.
         git ls-files -z -- '*.json' > "$json_file_list"
         if [[ -s "$json_file_list" ]]; then
           echo "found=true" >> "$GITHUB_OUTPUT"
@@ -107,7 +107,7 @@ runs:
         if [[ -x ./node_modules/.bin/prettier ]]; then
           xargs -0 -r -a "${{ steps.json_files.outputs.list }}" ./node_modules/.bin/prettier --write
         else
-          xargs -0 -r -a "${{ steps.json_files.outputs.list }}" npx --yes prettier@3.8.0 --write
+          xargs -0 -r -a "${{ steps.json_files.outputs.list }}" npx --yes prettier@3.8.0 --write # Pin fallback Prettier for reproducible output.
         fi
         after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
 
@@ -122,7 +122,7 @@ runs:
       id: yaml_files
       shell: bash
       run: |
-        yaml_file_list="$RUNNER_TEMP/lint-all-the-things-yaml-files"
+        yaml_file_list="$RUNNER_TEMP/lint-all-the-things-yaml-files" # Save list for reuse in Prettier run.
         git ls-files -z -- '*.yml' '*.yaml' > "$yaml_file_list"
         if [[ -s "$yaml_file_list" ]]; then
           echo "found=true" >> "$GITHUB_OUTPUT"
@@ -139,7 +139,7 @@ runs:
         if [[ -x ./node_modules/.bin/prettier ]]; then
           xargs -0 -r -a "${{ steps.yaml_files.outputs.list }}" ./node_modules/.bin/prettier --write
         else
-          xargs -0 -r -a "${{ steps.yaml_files.outputs.list }}" npx --yes prettier@3.8.0 --write
+          xargs -0 -r -a "${{ steps.yaml_files.outputs.list }}" npx --yes prettier@3.8.0 --write # Pin fallback Prettier for reproducible output.
         fi
         after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
 
