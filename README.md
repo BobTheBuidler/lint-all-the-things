@@ -6,7 +6,7 @@ Automatically commits once (via [Poosh](https://github.com/BobTheBuidler/poosh))
 ## Features
 
 - Runs pyupgrade, isort, black, and autoflake in sequence (respecting any repo config files)
-- Runs Prettier on JSON and YAML files when present (respecting repo Prettier config)
+- Runs Prettier on JSON and YAML files when present (uses repo config; falls back to pinned `prettier@3.8.0` via `npx` when no local Prettier is installed)
 - Auto-commits once with Poosh, and the commit message lists only the linters that changed files (keeping detailed commands/versions)
 - Configurable Python version (default: 3.12)
 - Designed for use in PR workflows

@@ -31,6 +31,7 @@ jobs:
           const YAML_FILE = 'config.yml';
           const YAML_ALT_FILE = 'config.yaml';
           const PYUPGRADE_TARGET = '--py311-plus';
+          const PRETTIER_VERSION = '3.8.0';
 
           const run = (cmd, cwd, extraEnv = {}) =>
             execSync(cmd, { cwd, stdio: 'inherit', env: { ...process.env, ...extraEnv } });
@@ -206,9 +207,8 @@ jobs:
               );
             }
 
-            const jsonFiles = execSync("git ls-files -- '*.json'", { cwd: repo, encoding: 'utf8' })
-              .trim()
-              .split('\n')
+            const jsonFiles = execSync("git ls-files -z -- '*.json'", { cwd: repo, encoding: 'utf8' })
+              .split('\u0000')
               .filter(Boolean);
             if (jsonFiles.length) {
               const hashBeforePrettier = hashDiff(repo);
@@ -216,19 +216,23 @@ jobs:
               if (fs.existsSync(prettierPath)) {
                 runFile(prettierPath, ['--write', ...jsonFiles], repo, env);
               } else {
-                runFile('npx', ['--yes', 'prettier', '--write', ...jsonFiles], repo, env);
+                runFile(
+                  'npx',
+                  ['--yes', `prettier@${PRETTIER_VERSION}`, '--write', ...jsonFiles],
+                  repo,
+                  env
+                );
               }
               if (hashDiff(repo) !== hashBeforePrettier) {
                 addPrettierLabel('prettier --write *.json');
               }
             }
 
-            const yamlFiles = execSync("git ls-files -- '*.yml' '*.yaml'", {
+            const yamlFiles = execSync("git ls-files -z -- '*.yml' '*.yaml'", {
               cwd: repo,
               encoding: 'utf8',
             })
-              .trim()
-              .split('\n')
+              .split('\u0000')
               .filter(Boolean);
             if (yamlFiles.length) {
               const hashBeforePrettier = hashDiff(repo);
@@ -236,7 +240,12 @@ jobs:
               if (fs.existsSync(prettierPath)) {
                 runFile(prettierPath, ['--write', ...yamlFiles], repo, env);
               } else {
-                runFile('npx', ['--yes', 'prettier', '--write', ...yamlFiles], repo, env);
+                runFile(
+                  'npx',
+                  ['--yes', `prettier@${PRETTIER_VERSION}`, '--write', ...yamlFiles],
+                  repo,
+                  env
+                );
               }
               if (hashDiff(repo) !== hashBeforePrettier) {
                 addPrettierLabel('prettier --write *.yml *.yaml');
