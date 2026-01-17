@@ -25,8 +25,8 @@ runs:
     - name: Install Python linters
       shell: bash
       env:
-        PIP_DISABLE_PIP_VERSION_CHECK: "1"
-        PIP_NO_PYTHON_VERSION_WARNING: "1"
+        PIP_DISABLE_PIP_VERSION_CHECK: "1" # Skip the self-update check to reduce noise/network.
+        PIP_NO_PYTHON_VERSION_WARNING: "1" # Suppress Python version warnings; no effect on installs.
       run: python -m pip install pyupgrade isort black autoflake
 
     - name: Run PyUpgrade
