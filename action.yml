@@ -29,9 +29,9 @@ runs:
     - name: Run PyUpgrade
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         find . -name '*.py' -exec pyupgrade --${{ inputs.pyupgrade-target-version }}-plus --exit-zero-even-if-changed {} +
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           echo "changed_linters=${changed_linters:+$changed_linters,}pyupgrade" >> "$GITHUB_ENV"
@@ -45,9 +45,9 @@ runs:
     - name: Run isort
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         isort .
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           echo "changed_linters=${changed_linters:+$changed_linters,}isort" >> "$GITHUB_ENV"
@@ -61,9 +61,9 @@ runs:
     - name: Run Black
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         black .
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           echo "changed_linters=${changed_linters:+$changed_linters,}black" >> "$GITHUB_ENV"
@@ -77,9 +77,9 @@ runs:
     - name: Run Autoflake
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           echo "changed_linters=${changed_linters:+$changed_linters,}autoflake" >> "$GITHUB_ENV"
@@ -100,13 +100,13 @@ runs:
       if: steps.json_files.outputs.found == 'true'
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         if [[ -x ./node_modules/.bin/prettier ]]; then
           git ls-files -z -- '*.json' | xargs -0 -r ./node_modules/.bin/prettier --write
         else
           git ls-files -z -- '*.json' | xargs -0 -r npx --yes prettier --write
         fi
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           if [[ ",$changed_linters," != *",prettier,"* ]]; then
@@ -129,13 +129,13 @@ runs:
       if: steps.yaml_files.outputs.found == 'true'
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         if [[ -x ./node_modules/.bin/prettier ]]; then
           git ls-files -z -- '*.yml' '*.yaml' | xargs -0 -r ./node_modules/.bin/prettier --write
         else
           git ls-files -z -- '*.yml' '*.yaml' | xargs -0 -r npx --yes prettier --write
         fi
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           if [[ ",$changed_linters," != *",prettier,"* ]]; then
