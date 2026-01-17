@@ -22,9 +22,12 @@ runs:
         echo "changed_linters=" >> "$GITHUB_ENV"
         echo "changed_linter_labels=" >> "$GITHUB_ENV"
 
-    - name: Install PyUpgrade
+    - name: Install Python linters
       shell: bash
-      run: pip install pyupgrade
+      env:
+        PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        PIP_NO_PYTHON_VERSION_WARNING: "1"
+      run: python -m pip install pyupgrade isort black autoflake
 
     - name: Run PyUpgrade
       shell: bash
@@ -38,10 +41,6 @@ runs:
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }pyupgrade --${{ inputs.pyupgrade-target-version }}-plus" >> "$GITHUB_ENV"
         fi
 
-    - name: Install isort
-      shell: bash
-      run: pip install isort
-
     - name: Run isort
       shell: bash
       run: |
@@ -54,10 +53,6 @@ runs:
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }isort" >> "$GITHUB_ENV"
         fi
 
-    - name: Install Black
-      shell: bash
-      run: pip install black
-
     - name: Run Black
       shell: bash
       run: |
@@ -69,10 +64,6 @@ runs:
           echo "changed_linters=${changed_linters:+$changed_linters,}black" >> "$GITHUB_ENV"
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }black ." >> "$GITHUB_ENV"
         fi
-
-    - name: Install Autoflake
-      shell: bash
-      run: pip install autoflake
 
     - name: Run Autoflake
       shell: bash
