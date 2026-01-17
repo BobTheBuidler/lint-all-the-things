@@ -1,0 +1,4 @@
+pyupgrade
+isort
+black
+autoflake

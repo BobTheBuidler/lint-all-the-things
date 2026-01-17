@@ -13,6 +13,8 @@ runs:
       uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
+        cache: "pip"
+        cache-dependency-path: ${{ github.action_path }}/python-linters-requirements.txt
 
     - name: Initialize changed linters list
       shell: bash
@@ -20,91 +22,85 @@ runs:
         echo "changed_linters=" >> "$GITHUB_ENV"
         echo "changed_linter_labels=" >> "$GITHUB_ENV"
 
-    - name: Install PyUpgrade
+    - name: Install Python linters
       shell: bash
-      run: pip install pyupgrade
+      env:
+        PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        PIP_NO_PYTHON_VERSION_WARNING: "1"
+      run: python -m pip install pyupgrade isort black autoflake
 
     - name: Run PyUpgrade
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         find . -name '*.py' -exec pyupgrade --${{ inputs.pyupgrade-target-version }}-plus --exit-zero-even-if-changed {} +
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           echo "changed_linters=${changed_linters:+$changed_linters,}pyupgrade" >> "$GITHUB_ENV"
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }pyupgrade --${{ inputs.pyupgrade-target-version }}-plus" >> "$GITHUB_ENV"
         fi
 
-    - name: Install isort
-      shell: bash
-      run: pip install isort
-
     - name: Run isort
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         isort .
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           echo "changed_linters=${changed_linters:+$changed_linters,}isort" >> "$GITHUB_ENV"
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }isort" >> "$GITHUB_ENV"
         fi
 
-    - name: Install Black
-      shell: bash
-      run: pip install black
-
     - name: Run Black
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         black .
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           echo "changed_linters=${changed_linters:+$changed_linters,}black" >> "$GITHUB_ENV"
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }black ." >> "$GITHUB_ENV"
         fi
 
-    - name: Install Autoflake
-      shell: bash
-      run: pip install autoflake
-
     - name: Run Autoflake
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           echo "changed_linters=${changed_linters:+$changed_linters,}autoflake" >> "$GITHUB_ENV"
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r ." >> "$GITHUB_ENV"
         fi
 
-    - name: Check for JSON files
+    - name: Collect JSON files
       id: json_files
       shell: bash
       run: |
-        if git ls-files -- '*.json' | grep -q .; then
+        json_file_list="$RUNNER_TEMP/lint-all-the-things-json-files"
+        git ls-files -z -- '*.json' > "$json_file_list"
+        if [[ -s "$json_file_list" ]]; then
           echo "found=true" >> "$GITHUB_OUTPUT"
         else
           echo "found=false" >> "$GITHUB_OUTPUT"
         fi
+        echo "list=$json_file_list" >> "$GITHUB_OUTPUT"
 
     - name: Run Prettier (JSON)
       if: steps.json_files.outputs.found == 'true'
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         if [[ -x ./node_modules/.bin/prettier ]]; then
-          git ls-files -z -- '*.json' | xargs -0 -r ./node_modules/.bin/prettier --write
+          xargs -0 -r -a "${{ steps.json_files.outputs.list }}" ./node_modules/.bin/prettier --write
         else
-          git ls-files -z -- '*.json' | xargs -0 -r npx --yes prettier --write
+          xargs -0 -r -a "${{ steps.json_files.outputs.list }}" npx --yes prettier@3.8.0 --write
         fi
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           if [[ ",$changed_linters," != *",prettier,"* ]]; then
@@ -113,27 +109,30 @@ runs:
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }prettier --write *.json" >> "$GITHUB_ENV"
         fi
 
-    - name: Check for YAML files
+    - name: Collect YAML files
       id: yaml_files
       shell: bash
       run: |
-        if git ls-files -- '*.yml' '*.yaml' | grep -q .; then
+        yaml_file_list="$RUNNER_TEMP/lint-all-the-things-yaml-files"
+        git ls-files -z -- '*.yml' '*.yaml' > "$yaml_file_list"
+        if [[ -s "$yaml_file_list" ]]; then
           echo "found=true" >> "$GITHUB_OUTPUT"
         else
           echo "found=false" >> "$GITHUB_OUTPUT"
         fi
+        echo "list=$yaml_file_list" >> "$GITHUB_OUTPUT"
 
     - name: Run Prettier (YAML)
       if: steps.yaml_files.outputs.found == 'true'
       shell: bash
       run: |
-        before_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
         if [[ -x ./node_modules/.bin/prettier ]]; then
-          git ls-files -z -- '*.yml' '*.yaml' | xargs -0 -r ./node_modules/.bin/prettier --write
+          xargs -0 -r -a "${{ steps.yaml_files.outputs.list }}" ./node_modules/.bin/prettier --write
         else
-          git ls-files -z -- '*.yml' '*.yaml' | xargs -0 -r npx --yes prettier --write
+          xargs -0 -r -a "${{ steps.yaml_files.outputs.list }}" npx --yes prettier@3.8.0 --write
         fi
-        after_hash=$(git diff --no-color | sha256sum | cut -d' ' -f1)
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
         if [[ "$before_hash" != "$after_hash" ]]; then
           if [[ ",$changed_linters," != *",prettier,"* ]]; then
