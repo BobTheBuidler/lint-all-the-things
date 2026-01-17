@@ -39,7 +39,7 @@ jobs:
             execFileSync(file, args, { cwd, stdio: 'inherit', env: { ...process.env, ...extraEnv } });
 
           const hashDiff = (cwd) => {
-            const diff = execSync('git diff --no-color', { cwd, encoding: 'utf8' });
+            const diff = execSync('git diff --no-color --unified=0', { cwd, encoding: 'utf8' });
             return crypto.createHash('sha256').update(diff).digest('hex');
           };
 
