@@ -30,9 +30,11 @@ jobs:
           const JSON_FILE = 'data.json';
           const YAML_FILE = 'config.yml';
           const YAML_ALT_FILE = 'config.yaml';
+          const MARKDOWN_FILE = 'README.md';
           const TOML_FILE = 'pyproject.toml';
           const PYUPGRADE_TARGET = '--py311-plus';
           const PRETTIER_VERSION = '3.8.0';
+          const MARKDOWNLINT_VERSION = '0.21.0';
           const TAPLO_VERSION = '0.7.0';
 
           const run = (cmd, cwd, extraEnv = {}) =>
@@ -118,6 +120,7 @@ jobs:
           const setupRepo = ({
             withJson = false,
             withYaml = false,
+            withMarkdown = false,
             withToml = false,
           } = {}) => {
             const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-action-'));
@@ -131,6 +134,9 @@ jobs:
             if (withYaml) {
               files.push({ name: YAML_FILE, content: 'name: test\n' });
               files.push({ name: YAML_ALT_FILE, content: 'name: test\n' });
+            }
+            if (withMarkdown) {
+              files.push({ name: MARKDOWN_FILE, content: '# Example\n\ncontent\n' });
             }
             if (withToml) {
               files.push({ name: TOML_FILE, content: 'name = "test"\n' });
@@ -156,6 +162,24 @@ jobs:
               '',
             ].join('\n');
             writeStubAt(path.join(repo, 'node_modules', '.bin', 'prettier'), prettierStub);
+
+            const markdownlintStub = [
+              '#!/usr/bin/env node',
+              "const fs = require('fs');",
+              "const files = process.argv.slice(2).filter((arg) => !arg.startsWith('-'));",
+              "if (process.env.MOCK_MARKDOWNLINT_CHANGE === '1') {",
+              '  files.forEach((file) => {',
+              '    if (fs.existsSync(file) && fs.statSync(file).isFile()) {',
+              "      fs.appendFileSync(file, '\\n');",
+              '    }',
+              '  });',
+              '}',
+              '',
+            ].join('\n');
+            writeStubAt(
+              path.join(repo, 'node_modules', '.bin', 'markdownlint-cli2'),
+              markdownlintStub
+            );
 
             const taploStub = [
               '#!/usr/bin/env node',
@@ -277,6 +301,28 @@ jobs:
               }
             }
 
+            const markdownFiles = execSync("git ls-files -z -- '*.md'", { cwd: repo, encoding: 'utf8' })
+              .split('\u0000')
+              .filter(Boolean);
+            if (markdownFiles.length) {
+              const hashBeforeMarkdownlint = hashDiff(repo);
+              const markdownlintPath = path.join(repo, 'node_modules', '.bin', 'markdownlint-cli2');
+              if (fs.existsSync(markdownlintPath)) {
+                runFile(markdownlintPath, ['--no-globs', '--fix', ...markdownFiles], repo, env);
+              } else {
+                runFile(
+                  'npx',
+                  ['--yes', `markdownlint-cli2@${MARKDOWNLINT_VERSION}`, '--no-globs', '--fix', ...markdownFiles],
+                  repo,
+                  env
+                );
+              }
+              if (hashDiff(repo) !== hashBeforeMarkdownlint) {
+                changedLinters.push('markdownlint-cli2');
+                changedLabels.push('markdownlint-cli2 --fix *.md');
+              }
+            }
+
             const tomlFiles = execSync("git ls-files -z -- '*.toml'", { cwd: repo, encoding: 'utf8' })
               .split('\u0000')
               .filter(Boolean);
@@ -362,6 +408,13 @@ jobs:
             fs.rmSync(repo, { recursive: true, force: true });
           };
 
+          const testMarkdownOnly = () => {
+            const { repo, binDir } = setupRepo({ withMarkdown: true });
+            runActionLogic(repo, binDir, { MOCK_MARKDOWNLINT_CHANGE: '1' });
+            assertLog(repo, 'chore: lint (markdownlint-cli2 --fix *.md)');
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
           const testTaploOnly = () => {
             const { repo, binDir } = setupRepo({ withToml: true });
             runActionLogic(repo, binDir, { MOCK_TAPLO_CHANGE: '1' });
@@ -373,6 +426,7 @@ jobs:
             const { repo, binDir } = setupRepo({
               withJson: true,
               withYaml: true,
+              withMarkdown: true,
               withToml: true,
             });
             runActionLogic(repo, binDir, {
@@ -381,11 +435,12 @@ jobs:
               MOCK_BLACK_CHANGE: '1',
               MOCK_AUTOFLAKE_CHANGE: '1',
               MOCK_PRETTIER_CHANGE: '1',
+              MOCK_MARKDOWNLINT_CHANGE: '1',
               MOCK_TAPLO_CHANGE: '1',
             });
             assertLog(
               repo,
-              'chore: lint (pyupgrade --py311-plus; isort; black .; autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .; prettier --write *.json; prettier --write *.yml *.yaml; taplo format *.toml)'
+              'chore: lint (pyupgrade --py311-plus; isort; black .; autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .; prettier --write *.json; prettier --write *.yml *.yaml; markdownlint-cli2 --fix *.md; taplo format *.toml)'
             );
             fs.rmSync(repo, { recursive: true, force: true });
           };
@@ -398,6 +453,7 @@ jobs:
             testIsortBlack();
             testPrettierJsonOnly();
             testPrettierYamlOnly();
+            testMarkdownOnly();
             testTaploOnly();
             testAllLinters();
             console.log('All tests passed.');
