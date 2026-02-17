@@ -149,6 +149,36 @@ runs:
           echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }prettier --write *.yml *.yaml" >> "$GITHUB_ENV"
         fi
 
+    - name: Collect TOML files
+      id: toml_files
+      shell: bash
+      run: |
+        toml_file_list="$RUNNER_TEMP/lint-all-the-things-toml-files"
+        git ls-files -z -- '*.toml' > "$toml_file_list"
+        if [[ -s "$toml_file_list" ]]; then
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+        echo "list=$toml_file_list" >> "$GITHUB_OUTPUT"
+
+    - name: Run Taplo (TOML)
+      if: steps.toml_files.outputs.found == 'true'
+      shell: bash
+      run: |
+        before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1) # Zero-context diff keeps hash input smaller.
+        if [[ -x ./node_modules/.bin/taplo ]]; then
+          xargs -0 -r -a "${{ steps.toml_files.outputs.list }}" ./node_modules/.bin/taplo format
+        else
+          xargs -0 -r -a "${{ steps.toml_files.outputs.list }}" npx --yes @taplo/cli@0.7.0 format
+        fi
+        after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
+
+        if [[ "$before_hash" != "$after_hash" ]]; then
+          echo "changed_linters=${changed_linters:+$changed_linters,}taplo" >> "$GITHUB_ENV"
+          echo "changed_linter_labels=${changed_linter_labels:+$changed_linter_labels; }taplo format *.toml" >> "$GITHUB_ENV"
+        fi
+
     - name: Commit changes (all linters)
       if: env.changed_linters != ''
       uses: BobTheBuidler/poosh@v0.0.11

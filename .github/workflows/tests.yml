@@ -30,8 +30,10 @@ jobs:
           const JSON_FILE = 'data.json';
           const YAML_FILE = 'config.yml';
           const YAML_ALT_FILE = 'config.yaml';
+          const TOML_FILE = 'pyproject.toml';
           const PYUPGRADE_TARGET = '--py311-plus';
           const PRETTIER_VERSION = '3.8.0';
+          const TAPLO_VERSION = '0.7.0';
 
           const run = (cmd, cwd, extraEnv = {}) =>
             execSync(cmd, { cwd, stdio: 'inherit', env: { ...process.env, ...extraEnv } });
@@ -113,7 +115,11 @@ jobs:
             );
           };
 
-          const setupRepo = ({ withJson = false, withYaml = false } = {}) => {
+          const setupRepo = ({
+            withJson = false,
+            withYaml = false,
+            withToml = false,
+          } = {}) => {
             const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-action-'));
             run('git init -q', repo);
             run('git config user.name "Test Bot"', repo);
@@ -125,6 +131,9 @@ jobs:
             if (withYaml) {
               files.push({ name: YAML_FILE, content: 'name: test\n' });
               files.push({ name: YAML_ALT_FILE, content: 'name: test\n' });
+            }
+            if (withToml) {
+              files.push({ name: TOML_FILE, content: 'name = "test"\n' });
             }
             files.forEach((file) => {
               fs.writeFileSync(path.join(repo, file.name), file.content);
@@ -147,6 +156,22 @@ jobs:
               '',
             ].join('\n');
             writeStubAt(path.join(repo, 'node_modules', '.bin', 'prettier'), prettierStub);
+
+            const taploStub = [
+              '#!/usr/bin/env node',
+              "const fs = require('fs');",
+              'const args = process.argv.slice(2);',
+              "const files = args.filter((arg) => !arg.startsWith('-') && arg !== 'format' && arg !== 'fmt');",
+              "if (process.env.MOCK_TAPLO_CHANGE === '1') {",
+              '  files.forEach((file) => {',
+              '    if (fs.existsSync(file) && fs.statSync(file).isFile()) {',
+              "      fs.appendFileSync(file, '\\n');",
+              '    }',
+              '  });',
+              '}',
+              '',
+            ].join('\n');
+            writeStubAt(path.join(repo, 'node_modules', '.bin', 'taplo'), taploStub);
             return { repo, binDir };
           };
 
@@ -252,6 +277,28 @@ jobs:
               }
             }
 
+            const tomlFiles = execSync("git ls-files -z -- '*.toml'", { cwd: repo, encoding: 'utf8' })
+              .split('\u0000')
+              .filter(Boolean);
+            if (tomlFiles.length) {
+              const hashBeforeTaplo = hashDiff(repo);
+              const taploPath = path.join(repo, 'node_modules', '.bin', 'taplo');
+              if (fs.existsSync(taploPath)) {
+                runFile(taploPath, ['format', ...tomlFiles], repo, env);
+              } else {
+                runFile(
+                  'npx',
+                  ['--yes', `@taplo/cli@${TAPLO_VERSION}`, 'format', ...tomlFiles],
+                  repo,
+                  env
+                );
+              }
+              if (hashDiff(repo) !== hashBeforeTaplo) {
+                changedLinters.push('taplo');
+                changedLabels.push('taplo format *.toml');
+              }
+            }
+
             if (changedLinters.length) {
               const msg = `chore: lint (${changedLabels.join('; ')})`;
               fs.writeFileSync(path.join(repo, 'poosh.log'), msg + '\n');
@@ -315,18 +362,30 @@ jobs:
             fs.rmSync(repo, { recursive: true, force: true });
           };
 
+          const testTaploOnly = () => {
+            const { repo, binDir } = setupRepo({ withToml: true });
+            runActionLogic(repo, binDir, { MOCK_TAPLO_CHANGE: '1' });
+            assertLog(repo, 'chore: lint (taplo format *.toml)');
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
           const testAllLinters = () => {
-            const { repo, binDir } = setupRepo({ withJson: true, withYaml: true });
+            const { repo, binDir } = setupRepo({
+              withJson: true,
+              withYaml: true,
+              withToml: true,
+            });
             runActionLogic(repo, binDir, {
               MOCK_PYUPGRADE_CHANGE: '1',
               MOCK_ISORT_CHANGE: '1',
               MOCK_BLACK_CHANGE: '1',
               MOCK_AUTOFLAKE_CHANGE: '1',
               MOCK_PRETTIER_CHANGE: '1',
+              MOCK_TAPLO_CHANGE: '1',
             });
             assertLog(
               repo,
-              'chore: lint (pyupgrade --py311-plus; isort; black .; autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .; prettier --write *.json; prettier --write *.yml *.yaml)'
+              'chore: lint (pyupgrade --py311-plus; isort; black .; autoflake --remove-all-unused-imports --in-place --expand-star-imports --ignore-init-module-imports -r .; prettier --write *.json; prettier --write *.yml *.yaml; taplo format *.toml)'
             );
             fs.rmSync(repo, { recursive: true, force: true });
           };
@@ -339,6 +398,7 @@ jobs:
             testIsortBlack();
             testPrettierJsonOnly();
             testPrettierYamlOnly();
+            testTaploOnly();
             testAllLinters();
             console.log('All tests passed.');
           };
