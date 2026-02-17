@@ -1,12 +1,13 @@
 # Lint All The Things
 
-Composite GitHub Action to run [pyupgrade](https://github.com/asottile/pyupgrade), [isort](https://github.com/PyCQA/isort), [black](https://github.com/psf/black), [autoflake](https://github.com/PyCQA/autoflake), [Taplo](https://taplo.tamasfe.dev/), and [Prettier](https://prettier.io/) (for JSON/YAML files) on your codebase.  
+Composite GitHub Action to run [pyupgrade](https://github.com/asottile/pyupgrade), [isort](https://github.com/PyCQA/isort), [black](https://github.com/psf/black), [autoflake](https://github.com/PyCQA/autoflake), [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2), [Taplo](https://taplo.tamasfe.dev/), and [Prettier](https://prettier.io/) (for JSON/YAML files) on your codebase.  
 Automatically commits once (via [Poosh](https://github.com/BobTheBuidler/poosh)), pushes, or opens a PR if any of the tools modify your code—using a commit message that lists which linters actually changed files, with the same detail as the individual commits (e.g., pyupgrade target version, `black .`, autoflake flags, Prettier flags).
 
 ## Features
 
 - Runs pyupgrade, isort, black, and autoflake in sequence (respecting any repo config files)
 - Runs Prettier on JSON and YAML files when present (uses repo config; falls back to pinned `prettier@3.8.0` via `npx` when no local Prettier is installed)
+- Runs markdownlint-cli2 on Markdown files when present (uses repo config; falls back to pinned `markdownlint-cli2@0.21.0` via `npx` when no local install is available)
 - Runs Taplo on TOML files when present (uses repo config; falls back to pinned `@taplo/cli@0.7.0` via `npx` when no local install is available)
 - Auto-commits once with Poosh, and the commit message lists only the linters that changed files (keeping detailed commands/versions)
 - Configurable Python version (default: 3.12)
@@ -39,9 +40,10 @@ jobs:
 2. Installs and runs pyupgrade, isort, black, and autoflake (in that order; each tool uses your repo config if present)
 3. If the repo contains JSON files, runs Prettier on them using your repo config
 4. If the repo contains YAML files, runs Prettier on them using your repo config
-5. If the repo contains TOML files, runs Taplo formatting using your repo config
-6. After each tool, checks for changes and builds a list of linters that modified code
-7. Commits once (via Poosh) with a message that lists the linters that made changes—preserving details like pyupgrade target, `black .`, autoflake flags, and Prettier flags—then pushes or opens a PR
+5. If the repo contains Markdown files, runs markdownlint-cli2 with auto-fix using your repo config
+6. If the repo contains TOML files, runs Taplo formatting using your repo config
+7. After each tool, checks for changes and builds a list of linters that modified code
+8. Commits once (via Poosh) with a message that lists the linters that made changes—preserving details like pyupgrade target, `black .`, autoflake flags, and Prettier flags—then pushes or opens a PR
 
 **Note:**  
 - This action expects you to have already checked out your code (use actions/checkout before this action).
@@ -54,6 +56,7 @@ jobs:
 - `chore: lint (black .)`
 - `chore: lint (prettier --write *.json)`
 - `chore: lint (prettier --write *.yml *.yaml)`
+- `chore: lint (markdownlint-cli2 --fix *.md)`
 - `chore: lint (taplo format *.toml)`
 
 ## Testing
