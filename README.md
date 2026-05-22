@@ -28,11 +28,21 @@ jobs:
       - uses: BobTheBuidler/lint-all-the-things@master
         with:
           python-version: 3.12
+          # Optional Poosh publish controls:
+          # direct-push: true
+          # pr-branch: lint/${{ github.head_ref || github.ref_name }}
+          # pr-base: ${{ github.head_ref || github.ref_name }}
+          # pr-branch-strategy: update
 ```
 
 ## Inputs
 
 - **python-version** (required): Python version to use
+- **pyupgrade-target-version** (required): Python target for pyupgrade, such as `py310`
+- **direct-push** (optional, default `true`): Whether Poosh should try a direct push before falling back to a PR branch
+- **pr-branch** (optional): The PR branch Poosh should create or update when direct push is unavailable
+- **pr-base** (optional): The PR base branch Poosh should target when direct push is unavailable
+- **pr-branch-strategy** (optional, default `update`): How Poosh handles an existing PR branch: `update`, `unique`, or `fail`
 
 ## How it works
 
@@ -48,6 +58,7 @@ jobs:
 **Note:**  
 - This action expects you to have already checked out your code (use actions/checkout before this action).
 - Commits target the current branch (`github.head_ref` or `github.ref_name`). If a direct push fails (protected branch or fork PR), Poosh opens a PR instead; for fork PRs it targets the base branch.
+- Protected branches can set `direct-push: false` with an explicit `pr-branch`, `pr-base`, and `pr-branch-strategy: update` to update one stable lint PR branch.
 - Markdown linting is autofix-only: markdownlint-cli2 may report remaining findings after `--fix`, but this action will continue and only commit files that were actually changed.
 - If no changes are made by any tool, no commit is created.
 
