@@ -43,6 +43,19 @@ jobs:
           const runFile = (file, args, cwd, extraEnv = {}) =>
             execFileSync(file, args, { cwd, stdio: 'inherit', env: { ...process.env, ...extraEnv } });
 
+          const runFileAllowFailure = (file, args, cwd, extraEnv = {}) => {
+            try {
+              execFileSync(file, args, {
+                cwd,
+                stdio: 'inherit',
+                env: { ...process.env, ...extraEnv },
+              });
+              return 0;
+            } catch (err) {
+              return err.status || 1;
+            }
+          };
+
           const hashDiff = (cwd) => {
             const diff = execSync('git diff --no-color --unified=0', { cwd, encoding: 'utf8' });
             return crypto.createHash('sha256').update(diff).digest('hex');
@@ -173,6 +186,9 @@ jobs:
               "      fs.appendFileSync(file, '\\n');",
               '    }',
               '  });',
+              '}',
+              "if (process.env.MOCK_MARKDOWNLINT_FAIL === '1') {",
+              '  process.exit(7);',
               '}',
               '',
             ].join('\n');
@@ -307,15 +323,24 @@ jobs:
             if (markdownFiles.length) {
               const hashBeforeMarkdownlint = hashDiff(repo);
               const markdownlintPath = path.join(repo, 'node_modules', '.bin', 'markdownlint-cli2');
+              let markdownlintStatus;
               if (fs.existsSync(markdownlintPath)) {
-                runFile(markdownlintPath, ['--no-globs', '--fix', ...markdownFiles], repo, env);
+                markdownlintStatus = runFileAllowFailure(
+                  markdownlintPath,
+                  ['--no-globs', '--fix', ...markdownFiles],
+                  repo,
+                  env
+                );
               } else {
-                runFile(
+                markdownlintStatus = runFileAllowFailure(
                   'npx',
                   ['--yes', `markdownlint-cli2@${MARKDOWNLINT_VERSION}`, '--no-globs', '--fix', ...markdownFiles],
                   repo,
                   env
                 );
+              }
+              if (markdownlintStatus !== 0) {
+                console.log('markdownlint-cli2 reported findings after --fix; continuing.');
               }
               if (hashDiff(repo) !== hashBeforeMarkdownlint) {
                 changedLinters.push('markdownlint-cli2');
@@ -415,6 +440,16 @@ jobs:
             fs.rmSync(repo, { recursive: true, force: true });
           };
 
+          const testMarkdownAutofixFailureOnly = () => {
+            const { repo, binDir } = setupRepo({ withMarkdown: true });
+            runActionLogic(repo, binDir, {
+              MOCK_MARKDOWNLINT_CHANGE: '1',
+              MOCK_MARKDOWNLINT_FAIL: '1',
+            });
+            assertLog(repo, 'chore: lint (markdownlint-cli2 --fix *.md)');
+            fs.rmSync(repo, { recursive: true, force: true });
+          };
+
           const testTaploOnly = () => {
             const { repo, binDir } = setupRepo({ withToml: true });
             runActionLogic(repo, binDir, { MOCK_TAPLO_CHANGE: '1' });
@@ -454,6 +489,7 @@ jobs:
             testPrettierJsonOnly();
             testPrettierYamlOnly();
             testMarkdownOnly();
+            testMarkdownAutofixFailureOnly();
             testTaploOnly();
             testAllLinters();
             console.log('All tests passed.');
