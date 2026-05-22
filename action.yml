@@ -6,6 +6,22 @@ inputs:
     description: "Python version to use (eg. 3.9 or 3.10)"
   pyupgrade-target-version:
     description: "Python version to target for pyupgrade (eg. py39 or py310)"
+  direct-push:
+    description: "Whether Poosh should try a direct push before falling back to a PR branch."
+    required: false
+    default: "true"
+  pr-branch:
+    description: "The PR branch Poosh should create or update when direct push is unavailable."
+    required: false
+    default: ""
+  pr-base:
+    description: "The PR base branch Poosh should target when direct push is unavailable."
+    required: false
+    default: ""
+  pr-branch-strategy:
+    description: "How Poosh handles an existing PR branch: update, unique, or fail."
+    required: false
+    default: "update"
 runs:
   using: "composite"
   steps:
@@ -216,4 +232,7 @@ runs:
         commit-message: "chore: lint (${{ env.changed_linter_labels || env.changed_linters }})"
         trigger-branch: ${{ github.head_ref || github.ref_name }}
         trigger-pr-number: ${{ github.event.pull_request.number }}
-        pr-base: ${{ github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository && github.base_ref || '' }}
+        direct-push: ${{ inputs.direct-push }}
+        pr-branch: ${{ inputs.pr-branch }}
+        pr-base: ${{ inputs.pr-base || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository && github.base_ref || '') }}
+        pr-branch-strategy: ${{ inputs.pr-branch-strategy }}

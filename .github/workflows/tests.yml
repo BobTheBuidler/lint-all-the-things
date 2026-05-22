@@ -358,6 +358,13 @@ jobs:
             assert.strictEqual(content, expected);
           };
 
+          const assertActionContains = (expected) => {
+            const action = fs.readFileSync('action.yml', 'utf8');
+            expected.forEach((value) =>
+              assert.ok(action.includes(value), `expected action.yml to contain ${value}`)
+            );
+          };
+
           const testNoChanges = () => {
             const { repo, binDir } = setupRepo();
             runActionLogic(repo, binDir);
@@ -445,7 +452,21 @@ jobs:
             fs.rmSync(repo, { recursive: true, force: true });
           };
 
+          const testPooshPublishControls = () => {
+            assertActionContains([
+              'direct-push:',
+              'pr-branch:',
+              'pr-base:',
+              'pr-branch-strategy:',
+              'direct-push: ${{ inputs.direct-push }}',
+              'pr-branch: ${{ inputs.pr-branch }}',
+              "pr-base: ${{ inputs.pr-base || (github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository && github.base_ref || '') }}",
+              'pr-branch-strategy: ${{ inputs.pr-branch-strategy }}',
+            ]);
+          };
+
           const main = () => {
+            testPooshPublishControls();
             testNoChanges();
             testIsortOnly();
             testPyupgradeBlack();
