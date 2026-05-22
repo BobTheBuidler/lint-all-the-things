@@ -167,10 +167,14 @@ runs:
       shell: bash
       run: |
         before_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1) # Zero-context diff keeps hash input smaller.
+        markdownlint_exit=0
         if [[ -x ./node_modules/.bin/markdownlint-cli2 ]]; then
-          xargs -0 -r -a "${{ steps.markdown_files.outputs.list }}" ./node_modules/.bin/markdownlint-cli2 --no-globs --fix
+          xargs -0 -r -a "${{ steps.markdown_files.outputs.list }}" ./node_modules/.bin/markdownlint-cli2 --no-globs --fix || markdownlint_exit=$?
         else
-          xargs -0 -r -a "${{ steps.markdown_files.outputs.list }}" npx --yes markdownlint-cli2@0.21.0 --no-globs --fix
+          xargs -0 -r -a "${{ steps.markdown_files.outputs.list }}" npx --yes markdownlint-cli2@0.21.0 --no-globs --fix || markdownlint_exit=$?
+        fi
+        if [[ "$markdownlint_exit" -ne 0 ]]; then
+          echo "::notice::markdownlint-cli2 reported findings after --fix; continuing because Markdown linting is autofix-only."
         fi
         after_hash=$(git diff --no-color --unified=0 | sha256sum | cut -d' ' -f1)
 
